@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id               Int     @id @default(autoincrement())
+  telegramId       Int     @unique
+  username         String
+  firstName        String
+  lastName         String
+  coins            Int     @default(0)
+  totalCoins       Int     @default(0)
+  maxScore         Int     @default(0)
+  canPlay          Boolean @default(false)
+  birds            UserBird[]
+  refreshTokens    RefreshToken[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now())
+}
+
+model Bird {
+  id               Int     @id @default(autoincrement())
+  name             String  @unique
+  priceInStars     Int
+  imgUrls          String
+  users            UserBird[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now())
+}
+
+model UserBird {
+  id               Int          @id @default(autoincrement())
+  user             User         @relation(fields: [userId], references: [id])
+  userId           Int
+  bird             Bird @relation(fields: [birdId], references: [id])
+  birdId           Int
+  createdAt        DateTime @default(now())
+}
+
+model RefreshToken {
+  id               String   @id @default(uuid())
+  token            String   @unique
+  userId           Int
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revoked          Boolean  @default(false)
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+}
