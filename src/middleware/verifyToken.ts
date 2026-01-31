@@ -18,6 +18,6 @@ export function verifyToken(req: Request, res: Response, next: NextFunction) {
     req.userId = decoded.userId;
     next();
   } catch {
-    return res.status(403).json({ message: "Invalid or expired token" });
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 }
