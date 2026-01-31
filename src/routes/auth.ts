@@ -24,7 +24,6 @@ router.post("/sync", async (req, res) => {
       firstName: tgUser.first_name,
       lastName: tgUser.last_name ?? "",
       username: tgUser.username ?? "",
-      canPlay: true,
     },
   });
 

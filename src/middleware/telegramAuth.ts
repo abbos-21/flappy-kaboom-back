@@ -5,12 +5,14 @@ import { BOT_TOKEN } from "../config/env.js";
 export function telegramAuthMiddleware(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader)
     return res.status(401).json({ message: "Missing Authorization header" });
+
+  console.log(authHeader);
 
   const [type, initData] = authHeader.split(" ");
 

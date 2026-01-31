@@ -8,13 +8,18 @@ router.get("/sync", async (req: Request, res: Response) => {
     where: {
       id: req.userId!,
     },
+    select: {
+      coins: true,
+      maxScore: true,
+      canPlay: true,
+    },
   });
 
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
 
-  res.status(200).json({ success: true, data: { user: user } });
+  res.status(200).json({ success: true, user: user });
 });
 
 export default router;
