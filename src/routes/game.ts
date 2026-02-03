@@ -7,7 +7,7 @@ const router = express.Router();
 // Configuration constants must match Frontend constants
 const PIPE_SPAWN_RATE = 1.5; // Seconds per pipe
 const INITIAL_DELAY = 2.0; // Seconds before first pipe
-const LATENCY_BUFFER = 2.0; // Allow 2 seconds of lag buffer
+const LATENCY_BUFFER = 0.8; // Allow 2 seconds of lag buffer
 
 /**
  * 1. Start Game Session
@@ -44,10 +44,10 @@ router.post("/end", verifyToken, async (req: Request, res: Response) => {
   }
 
   try {
-    // 1. Fetch session AND user info in one go to save DB calls
+    // 1. Fetch session AND user info
     const session = await prisma.gameSession.findUnique({
       where: { id: sessionId },
-      include: { user: true }, // This gives us session.user.maxScore
+      include: { user: true },
     });
 
     if (!session || session.userId !== req.userId) {
@@ -62,17 +62,27 @@ router.post("/end", verifyToken, async (req: Request, res: Response) => {
     const durationSeconds =
       (now.getTime() - session.startTime.getTime()) / 1000;
 
-    // 2. Anti-Cheat Logic
-    const maxPossibleScore = Math.ceil(
-      (durationSeconds - INITIAL_DELAY + LATENCY_BUFFER) / PIPE_SPAWN_RATE,
-    );
+    // 2. Refined Anti-Cheat Math
+    // We subtract the initial delay. If the result is negative, game just started.
+    const netGameTime = durationSeconds - INITIAL_DELAY;
+
+    // In Kaboom loop(1.5), the first pipe usually spawns AFTER the first interval.
+    // So the first pipe passes the bird at roughly: INITIAL_DELAY + SPAWN_RATE + TravelTime.
+    // To be safe for pro players, we use a generous "Floor + 1" logic.
+    const maxPossibleScore =
+      netGameTime > 0
+        ? Math.floor((netGameTime + LATENCY_BUFFER) / PIPE_SPAWN_RATE) + 1
+        : 0;
 
     let finalStatus: "COMPLETED" | "FAILED" = "COMPLETED";
     let isValid = true;
     let coinsEarned = 0;
 
-    if (score > maxPossibleScore && score > 5) {
-      console.warn(`CHEAT DETECTED: User ${req.userId}`);
+    // Validation: Only flag if score is higher than math allows AND score is significant
+    if (score > maxPossibleScore && score > 3) {
+      console.warn(
+        `[ANTI-CHEAT] Rejecting score ${score}. Max allowed was ${maxPossibleScore} for ${durationSeconds.toFixed(2)}s`,
+      );
       finalStatus = "FAILED";
       isValid = false;
     } else {
@@ -80,11 +90,9 @@ router.post("/end", verifyToken, async (req: Request, res: Response) => {
     }
 
     // 3. Prepare User Data
-    // We already have the current maxScore from the 'include' above
     const isNewHighScore = isValid && score > session.user.maxScore;
 
     // 4. Update Database Transaction
-    // No awaits inside the array!
     const [updatedSession, updatedUser] = await prisma.$transaction([
       prisma.gameSession.update({
         where: { id: sessionId },
@@ -95,13 +103,11 @@ router.post("/end", verifyToken, async (req: Request, res: Response) => {
           isValid,
         },
       }),
-      // Use a single update call for user
       prisma.user.update({
         where: { id: req.userId },
         data: {
           coins: { increment: coinsEarned },
           totalCoins: { increment: coinsEarned },
-          // Only update if it's a record, otherwise leave it as is
           maxScore: isNewHighScore ? score : undefined,
         },
       }),
