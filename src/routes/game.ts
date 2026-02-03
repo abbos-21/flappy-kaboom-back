@@ -66,7 +66,6 @@ router.post("/end", verifyToken, async (req: Request, res: Response) => {
     const maxPossibleScore = Math.ceil(
       (durationSeconds - INITIAL_DELAY + LATENCY_BUFFER) / PIPE_SPAWN_RATE,
     );
-    console.log(maxPossibleScore);
 
     let finalStatus: "COMPLETED" | "FAILED" = "COMPLETED";
     let isValid = true;
