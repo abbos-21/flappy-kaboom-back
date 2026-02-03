@@ -1,5 +1,9 @@
 import { startServer } from "./server.js";
 
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 (async () => {
   try {
     await startServer();
