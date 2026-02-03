@@ -44,16 +44,16 @@ router.post("/end", verifyToken, async (req: Request, res: Response) => {
   }
 
   try {
+    // 1. Fetch session AND user info in one go to save DB calls
     const session = await prisma.gameSession.findUnique({
       where: { id: sessionId },
+      include: { user: true }, // This gives us session.user.maxScore
     });
 
-    // 1. Check existence and ownership
     if (!session || session.userId !== req.userId) {
       return res.status(403).json({ message: "Invalid session" });
     }
 
-    // 2. Check if already finished
     if (session.status !== "ACTIVE") {
       return res.status(400).json({ message: "Session already finalized" });
     }
@@ -62,70 +62,57 @@ router.post("/end", verifyToken, async (req: Request, res: Response) => {
     const durationSeconds =
       (now.getTime() - session.startTime.getTime()) / 1000;
 
-    // 3. Mathematical Validation (Anti-Cheat)
-    // Max Score = (Total Time - Start Delay) / Rate
+    // 2. Anti-Cheat Logic
     const maxPossibleScore = Math.ceil(
       (durationSeconds - INITIAL_DELAY + LATENCY_BUFFER) / PIPE_SPAWN_RATE,
     );
 
-    let finalStatus = "COMPLETED";
+    let finalStatus: "COMPLETED" | "FAILED" = "COMPLETED";
     let isValid = true;
     let coinsEarned = 0;
 
-    // If score is impossibly high given the time elapsed
     if (score > maxPossibleScore && score > 5) {
-      console.warn(
-        `CHEAT DETECTED: User ${req.userId} score ${score} in ${durationSeconds}s`,
-      );
+      console.warn(`CHEAT DETECTED: User ${req.userId}`);
       finalStatus = "FAILED";
       isValid = false;
     } else {
-      // Legit score
-      coinsEarned = score; // 1 coin per 1 score logic
+      coinsEarned = score;
     }
 
+    // 3. Prepare User Data
+    // We already have the current maxScore from the 'include' above
+    const isNewHighScore = isValid && score > session.user.maxScore;
+
     // 4. Update Database Transaction
+    // No awaits inside the array!
     const [updatedSession, updatedUser] = await prisma.$transaction([
       prisma.gameSession.update({
         where: { id: sessionId },
         data: {
           endTime: now,
           score: isValid ? score : 0,
-          status: finalStatus as any,
+          status: finalStatus,
           isValid,
         },
       }),
-      // Only update user stats if valid
-      ...(isValid
-        ? [
-            prisma.user.update({
-              where: { id: req.userId },
-              data: {
-                coins: { increment: coinsEarned },
-                totalCoins: { increment: coinsEarned },
-                maxScore: {
-                  set:
-                    score >
-                    (
-                      await prisma.user.findUniqueOrThrow({
-                        where: { id: req.userId },
-                      })
-                    ).maxScore
-                      ? score
-                      : undefined,
-                },
-              },
-            }),
-          ]
-        : []),
+      // Use a single update call for user
+      prisma.user.update({
+        where: { id: req.userId },
+        data: {
+          coins: { increment: coinsEarned },
+          totalCoins: { increment: coinsEarned },
+          // Only update if it's a record, otherwise leave it as is
+          maxScore: isNewHighScore ? score : undefined,
+        },
+      }),
     ]);
 
     res.json({
       success: true,
       valid: isValid,
-      newCoins: isValid ? updatedUser.coins : undefined,
+      newCoins: updatedUser.coins,
       earned: coinsEarned,
-      highScore: isValid ? updatedUser.maxScore : undefined,
+      highScore: updatedUser.maxScore,
     });
   } catch (error) {
     console.error("End Game Error:", error);
