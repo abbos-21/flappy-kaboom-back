@@ -8,46 +8,55 @@ datasource db {
 }
 
 model User {
-  id               Int     @id @default(autoincrement())
-  telegramId       Int     @unique
-  username         String
-  firstName        String
-  lastName         String
-  coins            Int     @default(0)
-  totalCoins       Int     @default(0)
-  maxScore         Int     @default(0)
-  canPlay          Boolean @default(false)
-  birds            UserBird[]
-  refreshTokens    RefreshToken[]
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  telegramId   BigInt   @unique // Changed to BigInt for 64-bit Telegram IDs
+  username     String?
+  firstName    String
+  lastName     String?
+  coins        Int      @default(0)
+  totalCoins   Int      @default(0)
+  maxScore     Int      @default(0)
+  
+  // Game Logic
+  canPlay      Boolean  @default(true) // Default to true for logic simplification
+
+  gameSessions  GameSession[]
+  refreshTokens RefreshToken[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
-model Bird {
-  id               Int     @id @default(autoincrement())
-  name             String  @unique
-  priceInStars     Int
-  imgUrls          String
-  users            UserBird[]
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @default(now())
+model GameSession {
+  id        String            @id @default(uuid())
+  userId    Int
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startTime DateTime          @default(now())
+  endTime   DateTime?
+  score     Int               @default(0)
+  status    GameSessionStatus @default(ACTIVE)
+
+  // Security fields
+  isValid   Boolean           @default(false)
+
+  @@index([userId])
 }
 
-model UserBird {
-  id               Int          @id @default(autoincrement())
-  user             User         @relation(fields: [userId], references: [id])
-  userId           Int
-  bird             Bird @relation(fields: [birdId], references: [id])
-  birdId           Int
-  createdAt        DateTime @default(now())
+enum GameSessionStatus {
+  ACTIVE
+  COMPLETED
+  FAILED   // Used for cheated/invalid sessions
 }
 
 model RefreshToken {
-  id               String   @id @default(uuid())
-  token            String   @unique
-  userId           Int
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  revoked          Boolean  @default(false)
-  expiresAt        DateTime
-  createdAt        DateTime @default(now())
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
