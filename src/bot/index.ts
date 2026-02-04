@@ -2,7 +2,7 @@
 import { Bot } from "grammy";
 import "dotenv/config";
 
-import commandsComposer from "./commands"; // your composer file
+import commandsComposer from "./commands.js"; // your composer file
 import { BOT_TOKEN } from "../config/env";
 
 if (!BOT_TOKEN) {
