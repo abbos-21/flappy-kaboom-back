@@ -9,22 +9,27 @@ datasource db {
 
 model User {
   id           Int      @id @default(autoincrement())
-  telegramId   BigInt   @unique // Changed to BigInt for 64-bit Telegram IDs
+  telegramId   BigInt   @unique
   username     String?
   firstName    String
   lastName     String?
   coins        Int      @default(0)
   totalCoins   Int      @default(0)
   maxScore     Int      @default(0)
-  
-  // Game Logic
-  canPlay      Boolean  @default(true) // Default to true for logic simplification
+  canPlay      Boolean  @default(true)
+
+  // ── Referral fields ────────────────────────────────────────
+  referredById Int?     // who invited this user
+  referrer     User?    @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals    User[]   @relation("Referrals")  // users this person invited
 
   gameSessions  GameSession[]
   refreshTokens RefreshToken[]
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([referredById])
 }
 
 model GameSession {
