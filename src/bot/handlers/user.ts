@@ -5,15 +5,16 @@ export async function getOrCreateUser(ctx: Context) {
   const tgId = ctx.from?.id;
   if (!tgId) throw new Error("No user id");
 
+  // 1. Try to find the user
   let user = await prisma.user.findUnique({
     where: { telegramId: BigInt(tgId) },
   });
 
+  // 2. If not found, create new user
   if (!user) {
-    // New user processing
     let referredById: number | undefined = undefined;
 
-    // Check for referral payload in /start command
+    // Check for referral (e.g., /start ref_1)
     if (ctx.match && typeof ctx.match === "string") {
       const match = ctx.match.trim();
       if (match.startsWith("ref_")) {
@@ -21,14 +22,18 @@ export async function getOrCreateUser(ctx: Context) {
         const refId = Number(refIdStr);
 
         if (!isNaN(refId) && refId > 0) {
-          const referrer = await prisma.user.findUnique({
+          // Verify referrer exists in DB
+          const referrerUser = await prisma.user.findUnique({
             where: { id: refId },
           });
-          if (referrer) referredById = refId;
+          if (referrerUser) {
+            referredById = refId;
+          }
         }
       }
     }
 
+    // Create the user
     user = await prisma.user.create({
       data: {
         telegramId: BigInt(tgId),
@@ -39,28 +44,34 @@ export async function getOrCreateUser(ctx: Context) {
       },
     });
 
-    // Reward referrer
+    // 3. Process Reward & Notification (The Fix)
     if (referredById) {
-      await prisma.user.update({
+      // Fetch the referrer again to get their TELEGRAM ID
+      const referrer = await prisma.user.findUnique({
         where: { id: referredById },
-        data: { coins: { increment: 100 }, totalCoins: { increment: 100 } },
       });
 
-      // Notify referrer
-      try {
-        // Need to convert BigInt to string for Telegram API
-        const referrerUser = await prisma.user.findUnique({
-          where: { id: referredById },
+      if (referrer) {
+        // A. Give coins
+        await prisma.user.update({
+          where: { id: referrer.id },
+          data: {
+            coins: { increment: 100 },
+            totalCoins: { increment: 100 },
+          },
         });
-        if (referrerUser) {
+
+        // B. Send Notification (Fixed: Use telegramId, not database id)
+        try {
           await ctx.api.sendMessage(
-            referrerUser.telegramId.toString(),
+            referrer.telegramId.toString(),
             "🎉 <b>New Referral!</b>\nSomeone joined using your link. You earned +100 coins!",
             { parse_mode: "HTML" },
           );
+        } catch (err) {
+          console.error(`Could not notify referrer ${referrer.id}:`, err);
+          // We swallow the error here so the new user isn't affected
         }
-      } catch (err) {
-        console.error("Failed to notify referrer:", err);
       }
     }
   }
