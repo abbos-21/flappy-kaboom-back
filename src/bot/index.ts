@@ -1,41 +1,35 @@
-// src/bot/index.ts
 import { Bot } from "grammy";
 import "dotenv/config";
-
-import commandsComposer from "./commands.js"; // your composer file
-import { BOT_TOKEN } from "../config/env";
+import interactionComposer from "./features/interactions.js";
+import { BOT_TOKEN } from "../config/env.js";
 
 if (!BOT_TOKEN) {
-  console.error("BOT_TOKEN is missing");
+  console.error("BOT_TOKEN is missing in environment variables");
   process.exit(1);
 }
 
 export const bot = new Bot(BOT_TOKEN);
 
-// Register middleware / handlers
-bot.use(commandsComposer);
+// 1. Register Logic
+bot.use(interactionComposer);
 
-// Error handler
+// 2. Global Error Handler
 bot.catch((err) => {
   const ctx = err.ctx;
-  console.error(`Update ${ctx?.update.update_id ?? "unknown"} failed:`, err);
+  console.error(`Error while handling update ${ctx.update.update_id}:`);
+  console.error(err.error);
 });
 
-/**
- * Starts the bot with long polling
- * Can be awaited or called directly
- */
+// 3. Start Function
 export async function startBot() {
   try {
-    const me = await bot.api.getMe();
-    console.log(`Bot @${me.username} started successfully`);
+    // Clear old updates to avoid spam on restart
+    await bot.api.deleteWebhook({ drop_pending_updates: true });
 
-    await bot.start({
-      drop_pending_updates: true,
-      onStart: () => {
-        console.log("Polling active — bot is ready!");
-      },
-    });
+    const me = await bot.api.getMe();
+    console.log(`✅ Bot @${me.username} is up and running!`);
+
+    await bot.start();
   } catch (error) {
     console.error("Failed to start bot:", error);
     process.exit(1);
@@ -43,10 +37,9 @@ export async function startBot() {
 }
 
 // Graceful shutdown
-process.once("SIGINT", () => bot.stop());
-process.once("SIGTERM", () => bot.stop());
+const stop = () => bot.stop();
+process.once("SIGINT", stop);
+process.once("SIGTERM", stop);
 
-// If this file is run directly → start the bot automatically
-if (require.main === module) {
-  startBot().catch(console.error);
-}
+// Run directly if executed as script
+// if (require.main === module) startBot();

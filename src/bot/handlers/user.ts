@@ -1,4 +1,3 @@
-// src/bot/handlers/user.ts
 import { Context } from "grammy";
 import { prisma } from "../../lib/prisma.js";
 
@@ -11,24 +10,21 @@ export async function getOrCreateUser(ctx: Context) {
   });
 
   if (!user) {
-    // New user → check if came via referral
+    // New user processing
     let referredById: number | undefined = undefined;
 
+    // Check for referral payload in /start command
     if (ctx.match && typeof ctx.match === "string") {
       const match = ctx.match.trim();
-
-      // We support: /start ref_123  or just /start 123
       if (match.startsWith("ref_")) {
         const refIdStr = match.replace("ref_", "");
         const refId = Number(refIdStr);
+
         if (!isNaN(refId) && refId > 0) {
-          // Check referrer exists
           const referrer = await prisma.user.findUnique({
             where: { id: refId },
           });
-          if (referrer) {
-            referredById = refId;
-          }
+          if (referrer) referredById = refId;
         }
       }
     }
@@ -43,24 +39,28 @@ export async function getOrCreateUser(ctx: Context) {
       },
     });
 
-    // Optional: reward the referrer
+    // Reward referrer
     if (referredById) {
       await prisma.user.update({
         where: { id: referredById },
-        data: {
-          coins: { increment: 100 }, // example reward
-          totalCoins: { increment: 100 },
-        },
+        data: { coins: { increment: 100 }, totalCoins: { increment: 100 } },
       });
 
-      // Notify referrer (optional but nice)
+      // Notify referrer
       try {
-        await ctx.api.sendMessage(
-          referredById.toString(), // telegramId is BigInt, but sendMessage accepts string
-          "🎉 You have a new referral! +100 coins",
-        );
+        // Need to convert BigInt to string for Telegram API
+        const referrerUser = await prisma.user.findUnique({
+          where: { id: referredById },
+        });
+        if (referrerUser) {
+          await ctx.api.sendMessage(
+            referrerUser.telegramId.toString(),
+            "🎉 <b>New Referral!</b>\nSomeone joined using your link. You earned +100 coins!",
+            { parse_mode: "HTML" },
+          );
+        }
       } catch (err) {
-        console.log("Cannot notify referrer:", err);
+        console.error("Failed to notify referrer:", err);
       }
     }
   }
