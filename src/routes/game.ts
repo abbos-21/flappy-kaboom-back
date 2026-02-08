@@ -157,4 +157,39 @@ router.get("/sync", verifyToken, async (req: Request, res: Response) => {
   res.json({ success: true, user });
 });
 
+router.get("/grant-play", async (req: Request, res: Response) => {
+  const { userid } = req.query;
+
+  if (!userid || typeof userid !== "string") {
+    return res.status(400).json({ message: "Missing or invalid userid" });
+  }
+
+  try {
+    const userTelegramId = BigInt(userid);
+
+    const user = await prisma.user.findUnique({
+      where: {
+        telegramId: userTelegramId,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        canPlay: true,
+      },
+    });
+
+    return res.status(200).json({ message: "Success" });
+  } catch (error) {
+    return res.status(400).json({ message: "Invalid BigInt format" });
+  }
+});
+
 export default router;

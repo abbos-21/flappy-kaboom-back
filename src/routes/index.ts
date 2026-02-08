@@ -6,6 +6,6 @@ import { telegramAuthMiddleware, verifyToken } from "../middleware/index.js";
 const router = express.Router();
 
 router.use("/auth", telegramAuthMiddleware, authRouter);
-router.use("/game", verifyToken, gameRouter);
+router.use("/game", gameRouter);
 
 export default router;
