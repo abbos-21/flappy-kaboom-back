@@ -13,8 +13,19 @@ const LATENCY_BUFFER = 0.8; // Allow 2 seconds of lag buffer
  * 1. Start Game Session
  * Creates a record in DB with the server-side timestamp.
  */
-router.post("/start", verifyToken, async (req: Request, res: Response) => {
+router.post("/start", verifyToken, async (req, res) => {
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId! },
+      select: { canPlay: true },
+    });
+
+    if (!user?.canPlay) {
+      return res.status(403).json({
+        message: "Ad required before playing",
+      });
+    }
+
     const session = await prisma.gameSession.create({
       data: {
         userId: req.userId!,
@@ -109,6 +120,7 @@ router.post("/end", verifyToken, async (req: Request, res: Response) => {
           coins: { increment: coinsEarned },
           totalCoins: { increment: coinsEarned },
           maxScore: isNewHighScore ? score : undefined,
+          canPlay: false,
         },
       }),
     ]);
@@ -136,6 +148,7 @@ router.get("/sync", verifyToken, async (req: Request, res: Response) => {
       coins: true,
       maxScore: true,
       firstName: true,
+      canPlay: true,
     },
   });
 
